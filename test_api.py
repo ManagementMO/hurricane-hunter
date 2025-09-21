@@ -24,12 +24,12 @@ async def test_api():
                     print("✗ Health check failed:", response.status)
                     return
 
-            # Test main API endpoint
+            # Test balloons API endpoint
             print("\nTesting /api/balloons/history endpoint...")
             async with session.get(f"{base_url}/api/balloons/history") as response:
                 if response.status == 200:
                     data = await response.json()
-                    print(f"✓ API call successful!")
+                    print(f"✓ Balloons API call successful!")
                     print(f"✓ Number of balloons: {len(data)}")
 
                     # Show sample data for first balloon
@@ -46,7 +46,30 @@ async def test_api():
                             print(f"✓ Newest timestamp: {newest_point['timestamp']}")
                             print(f"✓ Sample coordinates: lat={newest_point['lat']}, lon={newest_point['lon']}, alt={newest_point['alt']}")
                 else:
-                    print(f"✗ API call failed with status: {response.status}")
+                    print(f"✗ Balloons API call failed with status: {response.status}")
+                    error_text = await response.text()
+                    print(f"Error: {error_text}")
+
+            # Test storms API endpoint
+            print("\nTesting /api/storms endpoint...")
+            async with session.get(f"{base_url}/api/storms") as response:
+                if response.status == 200:
+                    storm_data = await response.json()
+                    print(f"✓ Storms API call successful!")
+                    print(f"✓ Number of active storms: {len(storm_data)}")
+
+                    # Show sample storm data
+                    if storm_data:
+                        first_storm = storm_data[0]
+                        print(f"✓ Sample storm: {first_storm['properties']['event']}")
+                        print(f"✓ Storm headline: {first_storm['properties']['headline'][:100]}...")
+                        if first_storm['properties']['area_desc']:
+                            print(f"✓ Affected area: {first_storm['properties']['area_desc'][:100]}...")
+                        print(f"✓ Severity: {first_storm['properties']['severity']}")
+                    else:
+                        print("✓ No active storms currently (this is normal)")
+                else:
+                    print(f"✗ Storms API call failed with status: {response.status}")
                     error_text = await response.text()
                     print(f"Error: {error_text}")
 
