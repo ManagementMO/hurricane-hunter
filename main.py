@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 import aiohttp
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, RootModel
 
 # Configure logging
@@ -12,6 +13,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Hurricane Hunter API", description="Weather balloon tracking service")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Cache expiry times (in minutes)
 BALLOON_CACHE_EXPIRY = 10  # 10 minutes for balloon data
