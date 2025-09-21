@@ -6,3 +6,5 @@ __pycache__
 .cursor
 __pycache__/
 __pycache__/main.py
+windborne-dashboard/node_modules
+windborne-dashboard/.env
