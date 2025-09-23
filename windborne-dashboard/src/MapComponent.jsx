@@ -2,75 +2,177 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 
-// Set your Mapbox access token
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
 
-const MapComponent = ({ balloons, storms }) => {
+const MapComponent = ({
+  balloons,
+  storms,
+  selectedBalloon,
+  onBalloonSelect,
+  onCenterChange,
+  isLoading
+}) => {
   const mapContainer = useRef(null)
   const map = useRef(null)
   const balloonMarkers = useRef([])
   const [mapError, setMapError] = useState(null)
   const [isMapLoaded, setIsMapLoaded] = useState(false)
 
-  // Check if Mapbox token is provided and valid
   const isTokenValid = mapboxgl.accessToken &&
     !mapboxgl.accessToken.includes('example') &&
     mapboxgl.accessToken !== 'undefined' &&
     mapboxgl.accessToken.length >= 50
 
-  // Initialize map - following 2025 best practices
-  useEffect(() => {
-    // Don't initialize if token is invalid or map already exists
-    if (!isTokenValid || map.current) return
-
-    // Ensure container is ready
-    if (!mapContainer.current) {
-      console.log('Container not ready, retrying...')
-      return
-    }
-
-    console.log('Initializing Mapbox map...')
+  const initializeMapLayers = useCallback(() => {
+    if (!map.current) return
 
     try {
-      // Initialize map instance
+      // Load custom icons
+      map.current.loadImage(
+        'data:image/svg+xml;base64,' + btoa(`
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="14" fill="#e74c3c" stroke="#fff" stroke-width="3"/>
+            <path d="M16 4 L16 28 M4 16 L28 16" stroke="#fff" stroke-width="3"/>
+            <circle cx="16" cy="16" r="4" fill="#fff"/>
+          </svg>
+        `),
+        'hurricane-icon'
+      )
+
+      // Add data sources
+      map.current.addSource('balloon-trajectories', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      })
+
+      map.current.addSource('storm-centers', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      })
+
+      map.current.addSource('storm-areas', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      })
+
+      // Add layers
+      map.current.addLayer({
+        id: 'storm-areas',
+        type: 'fill',
+        source: 'storm-areas',
+        paint: {
+          'fill-color': [
+            'case',
+            ['==', ['get', 'severity'], 'Extreme'], '#8b0000',
+            ['==', ['get', 'severity'], 'Severe'], '#e74c3c',
+            ['==', ['get', 'severity'], 'Moderate'], '#f39c12',
+            '#3498db'
+          ],
+          'fill-opacity': 0.15,
+          'fill-outline-color': [
+            'case',
+            ['==', ['get', 'severity'], 'Extreme'], '#8b0000',
+            ['==', ['get', 'severity'], 'Severe'], '#e74c3c',
+            ['==', ['get', 'severity'], 'Moderate'], '#f39c12',
+            '#3498db'
+          ]
+        }
+      })
+
+      map.current.addLayer({
+        id: 'balloon-trajectories',
+        type: 'line',
+        source: 'balloon-trajectories',
+        paint: {
+          'line-color': [
+            'case',
+            ['==', ['get', 'selected'], true], '#00ff88',
+            '#00cffc'
+          ],
+          'line-width': [
+            'case',
+            ['==', ['get', 'selected'], true], 4,
+            2
+          ],
+          'line-opacity': [
+            'case',
+            ['==', ['get', 'selected'], true], 1,
+            0.7
+          ]
+        }
+      })
+
+      map.current.addLayer({
+        id: 'storm-centers',
+        type: 'symbol',
+        source: 'storm-centers',
+        layout: {
+          'icon-image': 'hurricane-icon',
+          'icon-allow-overlap': true,
+          'icon-size': [
+            'case',
+            ['==', ['get', 'severity'], 'Extreme'], 1.2,
+            ['==', ['get', 'severity'], 'Severe'], 1.0,
+            0.8
+          ],
+          'text-field': ['get', 'event'],
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-size': 12,
+          'text-color': '#ffffff',
+          'text-halo-color': '#000000',
+          'text-halo-width': 2,
+          'text-offset': [0, 2],
+          'text-anchor': 'top'
+        }
+      })
+
+      addInteractivity()
+      console.log('Map layers initialized successfully')
+    } catch (error) {
+      console.error('Error initializing map layers:', error)
+      setMapError('Failed to initialize map layers')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isTokenValid || map.current) return
+
+    if (!mapContainer.current) return
+
+    try {
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/dark-v11',
         center: [-95, 35],
-        zoom: 3,
+        zoom: 4,
         attributionControl: false,
         logoPosition: 'bottom-right',
-        preserveDrawingBuffer: true // Helps with rendering issues
+        preserveDrawingBuffer: true
       })
 
-      console.log('Map instance created')
-
-      // Add navigation controls
       map.current.addControl(new mapboxgl.NavigationControl(), 'top-right')
+      map.current.addControl(new mapboxgl.ScaleControl(), 'bottom-left')
 
-      // Handle map load event
       map.current.on('load', () => {
-        console.log('Map loaded successfully!')
         setIsMapLoaded(true)
         initializeMapLayers()
       })
 
-      // Handle style load (important for React)
-      map.current.on('style.load', () => {
-        console.log('Map style loaded')
+      map.current.on('move', () => {
+        if (onCenterChange) {
+          const center = map.current.getCenter()
+          onCenterChange([center.lng, center.lat])
+        }
       })
 
-      // Handle errors
       map.current.on('error', (e) => {
         console.error('Mapbox error:', e)
         setMapError(e.error?.message || 'Map failed to load')
       })
 
-      // Force a resize after a short delay to ensure proper rendering
       setTimeout(() => {
         if (map.current) {
           map.current.resize()
-          console.log('Map resized')
         }
       }, 100)
 
@@ -79,7 +181,6 @@ const MapComponent = ({ balloons, storms }) => {
       setMapError(error.message)
     }
 
-    // Cleanup function
     return () => {
       if (map.current) {
         map.current.remove()
@@ -87,205 +188,130 @@ const MapComponent = ({ balloons, storms }) => {
         setIsMapLoaded(false)
       }
     }
-  }, [isTokenValid, initializeMapLayers])
-
-  const initializeMapLayers = useCallback(() => {
-    if (!map.current) return
-
-    try {
-      // Load hurricane icon
-      map.current.loadImage(
-        'data:image/svg+xml;base64,' + btoa(`
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="12" cy="12" r="10" fill="#e74c3c" stroke="#fff" stroke-width="2"/>
-            <path d="M12 2 L12 22 M2 12 L22 12" stroke="#fff" stroke-width="2"/>
-            <circle cx="12" cy="12" r="3" fill="#fff"/>
-          </svg>
-        `),
-        'hurricane-icon'
-      )
-
-      // Add balloon trajectories source
-      map.current.addSource('balloon-trajectories', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] }
-      })
-
-      // Add storm centers source
-      map.current.addSource('storm-centers', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] }
-      })
-
-      // Add storm cones source
-      map.current.addSource('storm-cones', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] }
-      })
-
-      // Add layers in order (bottom to top)
-
-      // Storm cones layer
-      map.current.addLayer({
-        id: 'storm-cones',
-        type: 'fill',
-        source: 'storm-cones',
-        paint: {
-          'fill-color': '#e74c3c',
-          'fill-opacity': 0.2,
-          'fill-outline-color': '#e74c3c'
-        }
-      })
-
-      // Balloon trajectories layer
-      map.current.addLayer({
-        id: 'balloon-trajectories',
-        type: 'line',
-        source: 'balloon-trajectories',
-        paint: {
-          'line-color': '#00cffc',
-          'line-width': 2,
-          'line-opacity': 0.8
-        }
-      })
-
-      // Storm centers layer
-      map.current.addLayer({
-        id: 'storm-centers',
-        type: 'symbol',
-        source: 'storm-centers',
-        layout: {
-          'icon-image': 'hurricane-icon',
-          'icon-allow-overlap': true,
-          'icon-size': 0.8
-        }
-      })
-
-      // Add interactivity
-      addInteractivity()
-
-      console.log('Map layers initialized successfully')
-    } catch (error) {
-      console.error('Error initializing map layers:', error)
-      setMapError('Failed to initialize map layers')
-    }
-  }, [])
+  }, [isTokenValid, initializeMapLayers, onCenterChange])
 
   const updateMapData = useCallback(() => {
-    if (!isMapLoaded || !map.current) {
-      return
-    }
+    if (!isMapLoaded || !map.current) return
 
     // Clear existing balloon markers
     balloonMarkers.current.forEach(marker => marker.remove())
     balloonMarkers.current = []
 
-    // Transform balloons to GeoJSON trajectories
-    const balloonFeatures = Object.values(balloons).map(balloon => {
-      const coordinates = balloon.trajectory.map(point => [point.lon, point.lat])
-      const latestPoint = balloon.trajectory[balloon.trajectory.length - 1]
+    if (balloons) {
+      // Transform balloons to GeoJSON trajectories
+      const balloonFeatures = Object.values(balloons).map(balloon => {
+        const coordinates = balloon.trajectory.map(point => [point.lon, point.lat])
+        const latestPoint = balloon.trajectory[balloon.trajectory.length - 1]
+        const isSelected = selectedBalloon === balloon.id
 
-      return {
-        type: 'Feature',
-        properties: {
-          balloonId: balloon.id,
-          latestAlt: latestPoint.alt,
-          trajectoryLength: balloon.trajectory.length
-        },
-        geometry: {
-          type: 'LineString',
-          coordinates: coordinates
+        return {
+          type: 'Feature',
+          properties: {
+            balloonId: balloon.id,
+            latestAlt: latestPoint.alt,
+            trajectoryLength: balloon.trajectory.length,
+            selected: isSelected
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: coordinates
+          }
         }
+      })
+
+      map.current.getSource('balloon-trajectories').setData({
+        type: 'FeatureCollection',
+        features: balloonFeatures
+      })
+
+      // Add enhanced markers for latest balloon positions
+      Object.values(balloons).forEach(balloon => {
+        const latestPoint = balloon.trajectory[balloon.trajectory.length - 1]
+        const isSelected = selectedBalloon === balloon.id
+
+        const markerElement = document.createElement('div')
+        markerElement.className = `balloon-marker ${isSelected ? 'selected' : ''}`
+        markerElement.innerHTML = `
+          <div class="marker-dot ${isSelected ? 'selected' : ''}"></div>
+          <div class="marker-label">B${balloon.id}</div>
+        `
+
+        markerElement.addEventListener('click', () => {
+          onBalloonSelect(balloon.id)
+        })
+
+        const marker = new mapboxgl.Marker(markerElement)
+          .setLngLat([latestPoint.lon, latestPoint.lat])
+          .addTo(map.current)
+
+        balloonMarkers.current.push(marker)
+      })
+
+      // Fly to selected balloon if any
+      if (selectedBalloon && balloons[selectedBalloon]) {
+        const latestPoint = balloons[selectedBalloon].trajectory[balloons[selectedBalloon].trajectory.length - 1]
+        map.current.flyTo({
+          center: [latestPoint.lon, latestPoint.lat],
+          zoom: 8,
+          duration: 2000
+        })
       }
-    })
+    }
 
-    // Update balloon trajectories
-    map.current.getSource('balloon-trajectories').setData({
-      type: 'FeatureCollection',
-      features: balloonFeatures
-    })
-
-    // Add pulsating markers for latest balloon positions
-    Object.values(balloons).forEach(balloon => {
-      const latestPoint = balloon.trajectory[balloon.trajectory.length - 1]
-
-      // Create custom marker element
-      const markerElement = document.createElement('div')
-      markerElement.className = 'pulsating-dot'
-
-      // Add tooltip on hover
-      markerElement.title = `Balloon ${balloon.id}\nAltitude: ${latestPoint.alt.toFixed(1)}m\nLast update: ${new Date(latestPoint.timestamp).toLocaleTimeString()}`
-
-      const marker = new mapboxgl.Marker(markerElement)
-        .setLngLat([latestPoint.lon, latestPoint.lat])
-        .addTo(map.current)
-
-      balloonMarkers.current.push(marker)
-    })
-
-    // Transform storms to GeoJSON
-    const stormCenterFeatures = storms.map(storm => ({
-      type: 'Feature',
-      properties: {
-        id: storm.id,
-        event: storm.properties.event,
-        headline: storm.properties.headline,
-        description: storm.properties.description,
-        severity: storm.properties.severity,
-        urgency: storm.properties.urgency,
-        areaDesc: storm.properties.area_desc
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: getStormCenter(storm)
-      }
-    }))
-
-    const stormConeFeatures = storms
-      .filter(storm => storm.geometry && storm.geometry.coordinates.length > 0)
-      .map(storm => ({
+    if (storms) {
+      // Transform storms to GeoJSON
+      const stormCenterFeatures = storms.map(storm => ({
         type: 'Feature',
         properties: {
           id: storm.id,
-          event: storm.properties.event
+          event: storm.properties.event,
+          headline: storm.properties.headline,
+          description: storm.properties.description,
+          severity: storm.properties.severity,
+          urgency: storm.properties.urgency,
+          areaDesc: storm.properties.area_desc
         },
-        geometry: storm.geometry
+        geometry: {
+          type: 'Point',
+          coordinates: getStormCenter(storm)
+        }
       }))
 
-    // Update storm sources
-    map.current.getSource('storm-centers').setData({
-      type: 'FeatureCollection',
-      features: stormCenterFeatures
-    })
+      const stormAreaFeatures = storms
+        .filter(storm => storm.geometry && storm.geometry.coordinates.length > 0)
+        .map(storm => ({
+          type: 'Feature',
+          properties: {
+            id: storm.id,
+            event: storm.properties.event,
+            severity: storm.properties.severity
+          },
+          geometry: storm.geometry
+        }))
 
-    map.current.getSource('storm-cones').setData({
-      type: 'FeatureCollection',
-      features: stormConeFeatures
-    })
+      map.current.getSource('storm-centers').setData({
+        type: 'FeatureCollection',
+        features: stormCenterFeatures
+      })
 
-    console.log('Map data updated:', {
-      balloons: balloonFeatures.length,
-      stormCenters: stormCenterFeatures.length,
-      stormCones: stormConeFeatures.length
-    })
-  }, [balloons, storms, isMapLoaded])
+      map.current.getSource('storm-areas').setData({
+        type: 'FeatureCollection',
+        features: stormAreaFeatures
+      })
+    }
+  }, [balloons, storms, selectedBalloon, isMapLoaded, onBalloonSelect])
 
-  // Update data when props change
   useEffect(() => {
-    if (!map.current || !balloons || !storms || !isMapLoaded) return
-
     updateMapData()
-  }, [balloons, storms, isMapLoaded, updateMapData])
+  }, [updateMapData])
 
   const getStormCenter = (storm) => {
     if (!storm.geometry || !storm.geometry.coordinates || storm.geometry.coordinates.length === 0) {
-      // Default to center of US if no geometry
       return [-95, 35]
     }
 
     const coords = storm.geometry.coordinates[0]
     if (Array.isArray(coords) && coords.length > 0) {
-      // Calculate centroid of polygon
       const lngs = coords.map(c => c[0])
       const lats = coords.map(c => c[1])
       const centerLng = lngs.reduce((a, b) => a + b) / lngs.length
@@ -304,18 +330,18 @@ const MapComponent = ({ balloons, storms }) => {
       const feature = e.features[0]
       const coordinates = e.lngLat
 
-      const popup = new mapboxgl.Popup()
+      const popup = new mapboxgl.Popup({ closeButton: false })
         .setLngLat(coordinates)
         .setHTML(`
-          <div class="balloon-popup">
+          <div class="map-popup balloon-popup">
             <h4>Balloon ${feature.properties.balloonId}</h4>
             <p>Current Altitude: ${feature.properties.latestAlt.toFixed(1)}m</p>
             <p>Trajectory Points: ${feature.properties.trajectoryLength}</p>
+            <p class="popup-action">Click to select</p>
           </div>
         `)
         .addTo(map.current)
 
-      // Store popup to remove on mouseleave
       map.current._balloonPopup = popup
     })
 
@@ -327,7 +353,12 @@ const MapComponent = ({ balloons, storms }) => {
       }
     })
 
-    // Storm center click
+    map.current.on('click', 'balloon-trajectories', (e) => {
+      const feature = e.features[0]
+      onBalloonSelect(feature.properties.balloonId)
+    })
+
+    // Storm center interactions
     map.current.on('click', 'storm-centers', (e) => {
       const feature = e.features[0]
       const coordinates = e.lngLat
@@ -335,10 +366,10 @@ const MapComponent = ({ balloons, storms }) => {
       new mapboxgl.Popup()
         .setLngLat(coordinates)
         .setHTML(`
-          <div class="storm-popup">
+          <div class="map-popup storm-popup">
             <h3>${feature.properties.event}</h3>
             <p><strong>Headline:</strong> ${feature.properties.headline || 'N/A'}</p>
-            <p class="storm-severity"><strong>Severity:</strong> ${feature.properties.severity || 'N/A'}</p>
+            <p><strong>Severity:</strong> <span class="severity-${feature.properties.severity?.toLowerCase()}">${feature.properties.severity || 'N/A'}</span></p>
             <p><strong>Urgency:</strong> ${feature.properties.urgency || 'N/A'}</p>
             <p><strong>Area:</strong> ${feature.properties.areaDesc || 'N/A'}</p>
             ${feature.properties.description ? `<p><strong>Details:</strong> ${feature.properties.description.substring(0, 200)}...</p>` : ''}
@@ -347,7 +378,6 @@ const MapComponent = ({ balloons, storms }) => {
         .addTo(map.current)
     })
 
-    // Change cursor on hover
     map.current.on('mouseenter', 'storm-centers', () => {
       map.current.getCanvas().style.cursor = 'pointer'
     })
@@ -357,109 +387,76 @@ const MapComponent = ({ balloons, storms }) => {
     })
   }
 
-  // Show token error if invalid
   if (!isTokenValid) {
     return (
-      <div className="map-container" style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexDirection: 'column',
-        gap: '20px'
-      }}>
-        <div style={{ color: '#e74c3c', fontSize: '18px' }}>
-          ⚠️ Mapbox Access Token Issue
-        </div>
-        <div style={{ color: '#bdc3c7', textAlign: 'center' }}>
-          Token status: {mapboxgl.accessToken ? `Present (${mapboxgl.accessToken.length} chars)` : 'Missing'}
-          <br />
-          Please add a valid Mapbox access token to the .env file:
-          <br />
-          <code>VITE_MAPBOX_ACCESS_TOKEN=your_token_here</code>
-          <br />
-          Get one from <a href="https://account.mapbox.com/" target="_blank" rel="noopener noreferrer">account.mapbox.com</a>
+      <div className="map-error">
+        <div className="error-content">
+          <div className="error-icon">🗺️</div>
+          <h3>Map Unavailable</h3>
+          <p>Mapbox access token required</p>
+          <div className="error-details">
+            Add <code>VITE_MAPBOX_ACCESS_TOKEN</code> to your .env file
+            <br />
+            Get a free token at <a href="https://account.mapbox.com/" target="_blank" rel="noopener noreferrer">account.mapbox.com</a>
+          </div>
         </div>
       </div>
     )
   }
 
-  // Show map error if any
   if (mapError) {
     return (
-      <div className="map-container" style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexDirection: 'column',
-        gap: '20px'
-      }}>
-        <div style={{ color: '#e74c3c', fontSize: '18px' }}>
-          ⚠️ Map Error
+      <div className="map-error">
+        <div className="error-content">
+          <div className="error-icon">⚠️</div>
+          <h3>Map Error</h3>
+          <p>{mapError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="retry-button"
+          >
+            Retry
+          </button>
         </div>
-        <div style={{ color: '#bdc3c7', textAlign: 'center' }}>
-          {mapError}
-        </div>
-        <button
-          onClick={() => window.location.reload()}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#e74c3c',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          Retry
-        </button>
       </div>
     )
   }
 
   return (
-    <div
-      ref={mapContainer}
-      className="map-container"
-      style={{
-        width: '100vw',
-        height: '100vh',
-        background: '#111',
-        position: 'relative'
-      }}
-    >
-      {/* Status indicator */}
-      <div style={{
-        position: 'absolute',
-        top: '10px',
-        left: '10px',
-        color: '#00cffc',
-        fontSize: '12px',
-        zIndex: 1000,
-        background: 'rgba(0,0,0,0.8)',
-        padding: '10px',
-        borderRadius: '4px'
-      }}>
-        <div>Map: {isMapLoaded ? 'Loaded' : 'Loading...'}</div>
-        {balloons && storms && (
-          <div>Data: {Object.keys(balloons).length} balloons • {storms.length} storms</div>
-        )}
-      </div>
+    <div className="map-container">
+      <div ref={mapContainer} className="mapbox-container" />
 
-      {/* Loading indicator */}
+      {/* Map Loading Indicator */}
       {!isMapLoaded && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          color: '#00cffc',
-          fontSize: '18px',
-          zIndex: 1000,
-          textAlign: 'center'
-        }}>
-          Loading Mapbox...
+        <div className="map-loading">
+          <div className="loading-spinner"></div>
+          <span>Loading map...</span>
         </div>
       )}
+
+      {/* Map Status Overlay */}
+      <div className="map-status">
+        <div className="status-item">
+          <span className="status-label">Map:</span>
+          <span className={`status-value ${isMapLoaded ? 'ready' : 'loading'}`}>
+            {isMapLoaded ? 'Ready' : 'Loading...'}
+          </span>
+        </div>
+        {balloons && storms && (
+          <div className="status-item">
+            <span className="status-label">Data:</span>
+            <span className="status-value ready">
+              {Object.keys(balloons).length} balloons • {storms.length} alerts
+            </span>
+          </div>
+        )}
+        {selectedBalloon && (
+          <div className="status-item selected">
+            <span className="status-label">Selected:</span>
+            <span className="status-value">Balloon {selectedBalloon}</span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
