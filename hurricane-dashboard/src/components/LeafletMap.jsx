@@ -29,51 +29,86 @@ const MapUpdater = ({ balloons, storms, monitoringBalloons }) => {
   return null;
 };
 
-// Pulsating marker component
-const PulsatingMarker = ({ position, isMonitoring, balloonId, altitude }) => {
-  const [pulseSize, setPulseSize] = useState(4);
+// Enhanced balloon marker component
+const BalloonMarker = ({ position, isMonitoring, balloonId, altitude }) => {
+  const [pulseSize, setPulseSize] = useState(5);
 
   useEffect(() => {
     if (!isMonitoring) return;
 
     const interval = setInterval(() => {
       setPulseSize(prev => {
-        if (prev >= 6) return 4;
-        return prev + 0.5;
+        if (prev >= 7) return 5;
+        return prev + 0.4;
       });
-    }, 800); // Even slower, more subtle animation
+    }, 1000); // Slower, more dramatic pulsing for monitoring balloons
 
     return () => clearInterval(interval);
   }, [isMonitoring]);
 
-  const color = isMonitoring ? '#cc0000' : '#0066cc'; // Dark colors for light mode visibility
-
-  return (
-    <CircleMarker
-      center={position}
-      radius={isMonitoring ? pulseSize : 4}
-      pathOptions={{
-        fillColor: color,
-        color: '#333333',
-        weight: 1.5,
-        opacity: 0.8,
-        fillOpacity: 0.6
-      }}
-    >
-      <Popup>
-        <div>
-          <strong>Balloon {balloonId}</strong>
-          <br />Altitude: {Math.round(altitude)}m
-          {isMonitoring && (
-            <>
+  if (isMonitoring) {
+    // Monitoring balloons: Double-ring design with warning colors
+    return (
+      <>
+        {/* Outer warning ring */}
+        <CircleMarker
+          center={position}
+          radius={pulseSize + 2}
+          pathOptions={{
+            fillColor: 'transparent',
+            color: '#ff6b00', // Orange warning ring
+            weight: 2,
+            opacity: 0.8,
+            fillOpacity: 0,
+            dashArray: '5, 5' // Dashed outline for distinction
+          }}
+        />
+        {/* Inner balloon core */}
+        <CircleMarker
+          center={position}
+          radius={pulseSize}
+          pathOptions={{
+            fillColor: '#0088ff', // Bright blue to stay balloon-like
+            color: '#ffffff',     // White border to stand out
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+          }}
+        >
+          <Popup>
+            <div>
+              <strong>🎈 Balloon {balloonId}</strong>
+              <br />Altitude: {Math.round(altitude)}m
               <br />
-              <span style={{ color: '#ff4444' }}>🎯 Monitoring Storm</span>
-            </>
-          )}
-        </div>
-      </Popup>
-    </CircleMarker>
-  );
+              <span style={{ color: '#ff6b00', fontWeight: 'bold' }}>⚠️ MONITORING STORM</span>
+            </div>
+          </Popup>
+        </CircleMarker>
+      </>
+    );
+  } else {
+    // Regular balloons: Simple design
+    return (
+      <CircleMarker
+        center={position}
+        radius={4}
+        pathOptions={{
+          fillColor: '#0066cc', // Standard blue
+          color: '#ffffff',     // White border
+          weight: 1.5,
+          opacity: 0.8,
+          fillOpacity: 0.7
+        }}
+      >
+        <Popup>
+          <div>
+            <strong>🎈 Balloon {balloonId}</strong>
+            <br />Altitude: {Math.round(altitude)}m
+          </div>
+        </Popup>
+      </CircleMarker>
+    );
+  }
 };
 
 const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons }) => {
@@ -112,9 +147,10 @@ const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons }) => {
       trajectories.push({
         id,
         positions: pathCoords,
-        color: isMonitoring ? '#cc0000' : '#0066cc',
-        weight: isMonitoring ? 1.5 : 1,
-        opacity: isMonitoring ? 0.6 : 0.4,
+        color: isMonitoring ? '#ff6b00' : '#0066cc', // Orange for monitoring, blue for regular
+        weight: isMonitoring ? 2 : 1,
+        opacity: isMonitoring ? 0.7 : 0.4,
+        dashArray: isMonitoring ? '8, 4' : undefined, // Dashed line for monitoring balloons
         isMonitoring
       });
 
@@ -239,7 +275,8 @@ const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons }) => {
             pathOptions={{
               color: trajectory.color,
               weight: trajectory.weight,
-              opacity: trajectory.opacity
+              opacity: trajectory.opacity,
+              dashArray: trajectory.dashArray
             }}
           >
             <Popup>
@@ -248,7 +285,7 @@ const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons }) => {
                 {trajectory.isMonitoring && (
                   <>
                     <br />
-                    <span style={{ color: '#ff4444' }}>🎯 Monitoring Storm</span>
+                    <span style={{ color: '#ff6b00', fontWeight: 'bold' }}>⚠️ MONITORING STORM</span>
                   </>
                 )}
               </div>
@@ -258,7 +295,7 @@ const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons }) => {
 
         {/* Balloon current positions */}
         {processedData.balloonPositions.map(balloon => (
-          <PulsatingMarker
+          <BalloonMarker
             key={balloon.id}
             position={balloon.position}
             isMonitoring={balloon.isMonitoring}
