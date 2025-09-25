@@ -17,9 +17,17 @@ app = FastAPI(title="Hurricane Hunter API", description="Weather balloon trackin
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:3000",
+        "https://*.vercel.app",
+        "https://*.netlify.app",
+        "https://hurricane-hunter.vercel.app",
+        "https://hurricane-hunter.netlify.app",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -381,8 +389,14 @@ async def get_active_storms():
 
 @app.get("/")
 async def root():
-    """Health check endpoint."""
+    """Root endpoint."""
     return {"message": "Hurricane Hunter API is running"}
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint for Docker."""
+    return {"status": "healthy", "service": "Hurricane Hunter API"}
 
 
 if __name__ == "__main__":
