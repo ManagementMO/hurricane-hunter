@@ -3,6 +3,7 @@ import * as turf from '@turf/turf';
 import LeafletMap from './components/LeafletMap';
 import InsightPanel from './components/InsightPanel';
 import TimeSlider from './components/TimeSlider';
+import { API_ENDPOINTS, isDevelopment, API_BASE_URL } from './config';
 import './App.css';
 
 function App() {
@@ -13,6 +14,13 @@ function App() {
   const [selectedTime, setSelectedTime] = useState(100);
   const [monitoringBalloons, setMonitoringBalloons] = useState([]);
 
+  // Log environment info
+  useEffect(() => {
+    console.log(`🌪️ Hurricane Hunter Dashboard`);
+    console.log(`Environment: ${isDevelopment ? 'Development' : 'Production'}`);
+    console.log(`API Base URL: ${API_BASE_URL}`);
+  }, []);
+
   // Fetch data from backend
   useEffect(() => {
     const fetchData = async () => {
@@ -20,8 +28,8 @@ function App() {
         setLoading(true);
 
         const [balloonsResponse, stormsResponse] = await Promise.all([
-          fetch('http://localhost:8000/api/balloons/history'),
-          fetch('http://localhost:8000/api/storms')
+          fetch(API_ENDPOINTS.balloons),
+          fetch(API_ENDPOINTS.storms)
         ]);
 
         if (!balloonsResponse.ok || !stormsResponse.ok) {
@@ -35,7 +43,7 @@ function App() {
         setStorms(stormsData);
         setError(null);
       } catch (err) {
-        console.error('Error fetching data, using demo data:', err);
+        console.error(`Error fetching data from ${isDevelopment ? 'local' : 'production'} backend, using demo data:`, err);
 
         // Use demo data when backend is not available
         const demoData = generateDemoData();
@@ -214,7 +222,7 @@ function App() {
       <div className="error-screen">
         <h2>Connection Failed</h2>
         <p>{error}</p>
-        <p>Please ensure the backend is running on http://localhost:8000</p>
+        <p>Backend connection failed. Falling back to demo data.</p>
       </div>
     );
   }
