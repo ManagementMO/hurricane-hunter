@@ -37,6 +37,7 @@ const InsightPanel = ({ balloons, storms, monitoringBalloons }) => {
           </div>
         </div>
       )}
+
     </div>
   );
 };

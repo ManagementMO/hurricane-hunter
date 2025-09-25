@@ -30,8 +30,9 @@ const MapUpdater = ({ balloons, storms, monitoringBalloons }) => {
 };
 
 // Enhanced balloon marker component
-const BalloonMarker = ({ position, isMonitoring, balloonId, altitude }) => {
+const BalloonMarker = ({ position, isMonitoring, balloonId, altitude, onBalloonSelect }) => {
   const [pulseSize, setPulseSize] = useState(5);
+  const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
     if (!isMonitoring) return;
@@ -46,6 +47,13 @@ const BalloonMarker = ({ position, isMonitoring, balloonId, altitude }) => {
     return () => clearInterval(interval);
   }, [isMonitoring]);
 
+  const handleClick = () => {
+    console.log('Balloon clicked:', balloonId, 'onBalloonSelect:', !!onBalloonSelect);
+    if (onBalloonSelect) {
+      onBalloonSelect(balloonId);
+    }
+  };
+
   if (isMonitoring) {
     // Monitoring balloons: Double-ring design with warning colors
     return (
@@ -53,26 +61,60 @@ const BalloonMarker = ({ position, isMonitoring, balloonId, altitude }) => {
         {/* Outer warning ring */}
         <CircleMarker
           center={position}
-          radius={pulseSize + 2}
+          radius={isHovered ? pulseSize + 3 : pulseSize + 2}
           pathOptions={{
             fillColor: 'transparent',
-            color: '#ff6b00', // Orange warning ring
-            weight: 2,
-            opacity: 0.8,
+            color: isHovered ? '#ffaa44' : '#ff6b00', // Brighter orange on hover
+            weight: isHovered ? 3 : 2,
+            opacity: isHovered ? 1 : 0.8,
             fillOpacity: 0,
             dashArray: '5, 5' // Dashed outline for distinction
           }}
+          eventHandlers={{
+            click: handleClick,
+            mouseover: () => setIsHovered(true),
+            mouseout: () => setIsHovered(false)
+          }}
         />
+        {/* Hover indicator ring */}
+        {isHovered && (
+          <CircleMarker
+            center={position}
+            radius={pulseSize + 5}
+            pathOptions={{
+              fillColor: 'transparent',
+              color: '#ffffff',
+              weight: 2,
+              opacity: 0.6,
+              fillOpacity: 0,
+              dashArray: '2, 4'
+            }}
+            eventHandlers={{
+              click: handleClick,
+              mouseover: () => setIsHovered(true),
+              mouseout: () => setIsHovered(false)
+            }}
+          />
+        )}
         {/* Inner balloon core */}
         <CircleMarker
           center={position}
-          radius={pulseSize}
+          radius={isHovered ? pulseSize + 1 : pulseSize}
           pathOptions={{
-            fillColor: '#0088ff', // Bright blue to stay balloon-like
+            fillColor: isHovered ? '#00aaff' : '#0088ff', // Brighter blue on hover
             color: '#ffffff',     // White border to stand out
-            weight: 2,
+            weight: isHovered ? 3 : 2,
             opacity: 1,
-            fillOpacity: 0.8
+            fillOpacity: isHovered ? 0.9 : 0.8
+          }}
+          eventHandlers={{
+            click: (e) => {
+              console.log('Inner monitoring balloon clicked');
+              e.originalEvent?.stopPropagation?.();
+              handleClick();
+            },
+            mouseover: () => setIsHovered(true),
+            mouseout: () => setIsHovered(false)
           }}
         >
           <Popup>
@@ -81,37 +123,92 @@ const BalloonMarker = ({ position, isMonitoring, balloonId, altitude }) => {
               <br />Altitude: {Math.round(altitude)}m
               <br />
               <span style={{ color: '#ff6b00', fontWeight: 'bold' }}>⚠️ MONITORING STORM</span>
+              <br />
+              <div style={{
+                marginTop: '8px',
+                padding: '4px 8px',
+                background: 'rgba(255, 107, 0, 0.2)',
+                borderRadius: '4px',
+                fontSize: '11px',
+                color: '#ff6b00',
+                fontWeight: 'bold'
+              }}>
+                💡 Click balloon to view telemetry
+              </div>
             </div>
           </Popup>
         </CircleMarker>
       </>
     );
   } else {
-    // Regular balloons: Simple design
+    // Regular balloons: Simple design with hover effects
     return (
-      <CircleMarker
-        center={position}
-        radius={4}
-        pathOptions={{
-          fillColor: '#0066cc', // Standard blue
-          color: '#ffffff',     // White border
-          weight: 1.5,
-          opacity: 0.8,
-          fillOpacity: 0.7
-        }}
-      >
-        <Popup>
-          <div>
-            <strong>🎈 Balloon {balloonId}</strong>
-            <br />Altitude: {Math.round(altitude)}m
-          </div>
-        </Popup>
-      </CircleMarker>
+      <>
+        {/* Hover indicator ring */}
+        {isHovered && (
+          <CircleMarker
+            center={position}
+            radius={8}
+            pathOptions={{
+              fillColor: 'transparent',
+              color: '#ffffff',
+              weight: 2,
+              opacity: 0.7,
+              fillOpacity: 0,
+              dashArray: '3, 3'
+            }}
+            eventHandlers={{
+              click: handleClick,
+              mouseover: () => setIsHovered(true),
+              mouseout: () => setIsHovered(false)
+            }}
+          />
+        )}
+        <CircleMarker
+          center={position}
+          radius={isHovered ? 5 : 4}
+          pathOptions={{
+            fillColor: isHovered ? '#0088cc' : '#0066cc', // Brighter blue on hover
+            color: '#ffffff',     // White border
+            weight: isHovered ? 2.5 : 1.5,
+            opacity: isHovered ? 1 : 0.8,
+            fillOpacity: isHovered ? 0.9 : 0.7
+          }}
+          eventHandlers={{
+            click: (e) => {
+              console.log('Regular balloon clicked');
+              e.originalEvent?.stopPropagation?.();
+              handleClick();
+            },
+            mouseover: () => setIsHovered(true),
+            mouseout: () => setIsHovered(false)
+          }}
+        >
+          <Popup>
+            <div>
+              <strong>🎈 Balloon {balloonId}</strong>
+              <br />Altitude: {Math.round(altitude)}m
+              <br />
+              <div style={{
+                marginTop: '8px',
+                padding: '4px 8px',
+                background: 'rgba(0, 102, 204, 0.2)',
+                borderRadius: '4px',
+                fontSize: '11px',
+                color: '#0066cc',
+                fontWeight: 'bold'
+              }}>
+                💡 Click balloon to view telemetry
+              </div>
+            </div>
+          </Popup>
+        </CircleMarker>
+      </>
     );
   }
 };
 
-const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons }) => {
+const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons, onBalloonSelect }) => {
 
   // Memoize the processed data to prevent unnecessary re-processing
   const processedData = useMemo(() => {
@@ -301,6 +398,7 @@ const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons }) => {
             isMonitoring={balloon.isMonitoring}
             balloonId={balloon.id}
             altitude={balloon.altitude}
+            onBalloonSelect={onBalloonSelect}
           />
         ))}
       </MapContainer>

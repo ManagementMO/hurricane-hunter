@@ -144,3 +144,31 @@
   line-height: 1.2;
   margin: 0;
 }
+
+.telemetry-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 204, 255, 0.1);
+  border: 1px solid rgba(0, 204, 255, 0.3);
+  border-radius: 4px;
+  padding: 6px 12px;
+  animation: subtle-pulse 3s ease-in-out infinite;
+}
+
+.hint-text {
+  font-size: 11px;
+  color: rgba(0, 204, 255, 0.9);
+  line-height: 1.2;
+  margin: 0;
+  font-weight: 500;
+}
+
+@keyframes subtle-pulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}

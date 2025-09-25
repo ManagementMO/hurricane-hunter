@@ -4,6 +4,8 @@ import LeafletMap from './components/LeafletMap';
 import InsightPanel from './components/InsightPanel';
 import TimeSlider from './components/TimeSlider';
 import StormFilter from './components/StormFilter';
+import TelemetryPanel from './components/TelemetryPanel';
+import TelemetryInstructions from './components/TelemetryInstructions';
 import { API_ENDPOINTS, isDevelopment, API_BASE_URL } from './config';
 import './App.css';
 
@@ -14,6 +16,7 @@ function App() {
   const [error, setError] = useState(null);
   const [selectedTime, setSelectedTime] = useState(100);
   const [monitoringBalloons, setMonitoringBalloons] = useState([]);
+  const [selectedBalloonId, setSelectedBalloonId] = useState(null);
   const [stormFilters, setStormFilters] = useState({
     severity: {
       'Extreme': true,
@@ -213,6 +216,15 @@ function App() {
     setStormFilters(filters);
   }, []);
 
+  const handleBalloonSelect = useCallback((balloonId) => {
+    console.log('App: Balloon selected:', balloonId);
+    setSelectedBalloonId(balloonId);
+  }, []);
+
+  const handleCloseTelemetry = useCallback(() => {
+    setSelectedBalloonId(null);
+  }, []);
+
   // Filter storms based on current filters
   const getFilteredStorms = useCallback(() => {
     if (!storms || stormFilters.showAll) {
@@ -262,6 +274,8 @@ function App() {
 
   const filteredBalloons = getFilteredBalloons();
   const filteredStorms = getFilteredStorms();
+  const selectedBalloon = selectedBalloonId && balloons ? balloons[selectedBalloonId] : null;
+  const totalBalloons = balloons ? Object.keys(balloons).length : 0;
 
   return (
     <div className="app">
@@ -270,6 +284,7 @@ function App() {
         storms={filteredStorms}
         selectedTime={selectedTime}
         monitoringBalloons={monitoringBalloons}
+        onBalloonSelect={handleBalloonSelect}
       />
       <InsightPanel
         balloons={filteredBalloons}
@@ -281,6 +296,14 @@ function App() {
         storms={storms}
         onFilterChange={handleFilterChange}
       />
+      <TelemetryInstructions totalBalloons={totalBalloons} />
+      {selectedBalloon && (
+        <TelemetryPanel
+          balloon={selectedBalloon}
+          isMonitoring={monitoringBalloons.includes(selectedBalloonId)}
+          onClose={handleCloseTelemetry}
+        />
+      )}
     </div>
   );
 }
