@@ -3,6 +3,7 @@ import * as turf from '@turf/turf';
 import LeafletMap from './components/LeafletMap';
 import InsightPanel from './components/InsightPanel';
 import TimeSlider from './components/TimeSlider';
+import StormFilter from './components/StormFilter';
 import { API_ENDPOINTS, isDevelopment, API_BASE_URL } from './config';
 import './App.css';
 
@@ -13,6 +14,17 @@ function App() {
   const [error, setError] = useState(null);
   const [selectedTime, setSelectedTime] = useState(100);
   const [monitoringBalloons, setMonitoringBalloons] = useState([]);
+  const [stormFilters, setStormFilters] = useState({
+    severity: {
+      'Extreme': true,
+      'Severe': true,
+      'Moderate': true,
+      'Minor': true,
+      'Unknown': true
+    },
+    eventType: {},
+    showAll: true
+  });
 
   // Log environment info
   useEffect(() => {
@@ -197,6 +209,27 @@ function App() {
     setSelectedTime(time);
   }, []);
 
+  const handleFilterChange = useCallback((filters) => {
+    setStormFilters(filters);
+  }, []);
+
+  // Filter storms based on current filters
+  const getFilteredStorms = useCallback(() => {
+    if (!storms || stormFilters.showAll) {
+      return storms;
+    }
+
+    return storms.filter(storm => {
+      const severity = storm.properties?.severity || 'Unknown';
+      const eventType = storm.properties?.event;
+
+      const severityMatch = stormFilters.severity[severity] || false;
+      const eventTypeMatch = eventType ? (stormFilters.eventType[eventType] || false) : true;
+
+      return severityMatch && eventTypeMatch;
+    });
+  }, [storms, stormFilters]);
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -228,21 +261,26 @@ function App() {
   }
 
   const filteredBalloons = getFilteredBalloons();
+  const filteredStorms = getFilteredStorms();
 
   return (
     <div className="app">
       <LeafletMap
         balloons={filteredBalloons}
-        storms={storms}
+        storms={filteredStorms}
         selectedTime={selectedTime}
         monitoringBalloons={monitoringBalloons}
       />
       <InsightPanel
         balloons={filteredBalloons}
-        storms={storms}
+        storms={filteredStorms}
         monitoringBalloons={monitoringBalloons}
       />
       <TimeSlider onTimeChange={handleTimeChange} />
+      <StormFilter
+        storms={storms}
+        onFilterChange={handleFilterChange}
+      />
     </div>
   );
 }
