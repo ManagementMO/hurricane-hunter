@@ -192,9 +192,19 @@ function App() {
   if (loading) {
     return (
       <div className="loading-screen">
-        <div className="loading-spinner"></div>
-        <h2>Initializing Mission Control...</h2>
-        <p>Connecting to weather balloon constellation</p>
+        <div className="tornado-container">
+          <div className="tornado">
+            <div className="tornado-layer"></div>
+            <div className="tornado-layer"></div>
+            <div className="tornado-layer"></div>
+            <div className="tornado-center"></div>
+          </div>
+        </div>
+        <div className="loading-content">
+          <h2>Hurricane Hunter Mission Control</h2>
+          <p>Spinning up the weather balloon constellation...</p>
+          <p className="loading-quirky-text">🌪️ Chasing storms with style since 2025</p>
+        </div>
       </div>
     );
   }
