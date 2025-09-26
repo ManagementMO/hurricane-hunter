@@ -6,17 +6,20 @@ import TimeSlider from './components/TimeSlider';
 import StormFilter from './components/StormFilter';
 import TelemetryPanel from './components/TelemetryPanel';
 import TelemetryInstructions from './components/TelemetryInstructions';
+import CoverageToggle from './components/CoverageToggle';
 import { API_ENDPOINTS, isDevelopment, API_BASE_URL } from './config';
 import './App.css';
 
 function App() {
   const [balloons, setBalloons] = useState(null);
   const [storms, setStorms] = useState(null);
+  const [traditionalStations, setTraditionalStations] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedTime, setSelectedTime] = useState(100);
   const [monitoringBalloons, setMonitoringBalloons] = useState([]);
   const [selectedBalloonId, setSelectedBalloonId] = useState(null);
+  const [showCoverage, setShowCoverage] = useState(false);
   const [stormFilters, setStormFilters] = useState({
     severity: {
       'Extreme': true,
@@ -76,6 +79,31 @@ function App() {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch traditional stations data when coverage is toggled on
+  useEffect(() => {
+    if (showCoverage && !traditionalStations) {
+      const fetchTraditionalStations = async () => {
+        try {
+          console.log('Fetching traditional stations data...');
+          const response = await fetch(API_ENDPOINTS.traditionalStations);
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Traditional stations raw data:', data);
+            setTraditionalStations(data);
+            console.log(`Loaded ${data.features?.length || 0} traditional weather stations`);
+          } else {
+            console.error('Failed to fetch traditional stations:', response.status);
+          }
+        } catch (error) {
+          console.error('Error fetching traditional stations:', error);
+        }
+      };
+
+      fetchTraditionalStations();
+    }
+  }, [showCoverage, traditionalStations]);
 
   // Generate demo data for testing
   const generateDemoData = () => {
@@ -225,6 +253,10 @@ function App() {
     setSelectedBalloonId(null);
   }, []);
 
+  const handleCoverageToggle = useCallback(() => {
+    setShowCoverage(prev => !prev);
+  }, []);
+
   // Filter storms based on current filters
   const getFilteredStorms = useCallback(() => {
     if (!storms || stormFilters.showAll) {
@@ -276,12 +308,14 @@ function App() {
   const filteredStorms = getFilteredStorms();
   const selectedBalloon = selectedBalloonId && balloons ? balloons[selectedBalloonId] : null;
   const totalBalloons = balloons ? Object.keys(balloons).length : 0;
+  const stationCount = traditionalStations ? traditionalStations.features?.length || 0 : 0;
 
   return (
     <div className="app">
       <LeafletMap
         balloons={filteredBalloons}
         storms={filteredStorms}
+        traditionalStations={showCoverage ? traditionalStations : null}
         selectedTime={selectedTime}
         monitoringBalloons={monitoringBalloons}
         onBalloonSelect={handleBalloonSelect}
@@ -297,6 +331,11 @@ function App() {
         onFilterChange={handleFilterChange}
       />
       <TelemetryInstructions totalBalloons={totalBalloons} />
+      <CoverageToggle
+        isActive={showCoverage}
+        onToggle={handleCoverageToggle}
+        stationCount={stationCount}
+      />
       {selectedBalloon && (
         <TelemetryPanel
           balloon={selectedBalloon}

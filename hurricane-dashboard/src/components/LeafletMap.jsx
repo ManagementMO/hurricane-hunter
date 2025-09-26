@@ -208,7 +208,7 @@ const BalloonMarker = ({ position, isMonitoring, balloonId, altitude, onBalloonS
   }
 };
 
-const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons, onBalloonSelect }) => {
+const LeafletMap = ({ balloons, storms, traditionalStations, selectedTime, monitoringBalloons, onBalloonSelect }) => {
 
   // Memoize the processed data to prevent unnecessary re-processing
   const processedData = useMemo(() => {
@@ -216,19 +216,27 @@ const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons, onBall
       balloonTrajectories: [],
       balloonPositions: [],
       stormPolygons: [],
-      stormCenters: []
+      stormCenters: [],
+      traditionalStationPoints: []
     };
 
     console.log('Processing data for Leaflet map:', {
       balloonCount: Object.keys(balloons).length,
       stormCount: storms.length,
+      traditionalStationCount: traditionalStations?.features?.length || 0,
       monitoringCount: monitoringBalloons?.length || 0
     });
+
+    if (traditionalStations) {
+      console.log('Traditional stations data structure:', traditionalStations);
+      console.log('First few stations:', traditionalStations.features?.slice(0, 3));
+    }
 
     const trajectories = [];
     const positions = [];
     const stormPolys = [];
     const stormCents = [];
+    const traditionalPoints = [];
 
     // Process balloons
     Object.entries(balloons).forEach(([id, balloon]) => {
@@ -286,13 +294,30 @@ const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons, onBall
       }
     });
 
+    // Process traditional stations if provided
+    if (traditionalStations?.features) {
+      traditionalStations.features.forEach(station => {
+        if (station.geometry?.coordinates && station.properties) {
+          const [lon, lat] = station.geometry.coordinates;
+          if (lat && lon) {
+            traditionalPoints.push({
+              id: station.properties.id,
+              position: [lat, lon],
+              name: station.properties.name
+            });
+          }
+        }
+      });
+    }
+
     return {
       balloonTrajectories: trajectories,
       balloonPositions: positions,
       stormPolygons: stormPolys,
-      stormCenters: stormCents
+      stormCenters: stormCents,
+      traditionalStationPoints: traditionalPoints
     };
-  }, [balloons, storms, monitoringBalloons]);
+  }, [balloons, storms, traditionalStations, monitoringBalloons]);
 
   if (!balloons || !storms) {
     return (
@@ -400,6 +425,30 @@ const LeafletMap = ({ balloons, storms, selectedTime, monitoringBalloons, onBall
             altitude={balloon.altitude}
             onBalloonSelect={onBalloonSelect}
           />
+        ))}
+
+        {/* Traditional weather stations - background layer */}
+        {processedData.traditionalStationPoints.map(station => (
+          <CircleMarker
+            key={station.id}
+            center={station.position}
+            radius={2}
+            pathOptions={{
+              fillColor: '#888888',
+              color: '#666666',
+              weight: 0.5,
+              opacity: 0.4,
+              fillOpacity: 0.3
+            }}
+          >
+            <Popup>
+              <div>
+                <strong>Traditional Station</strong>
+                <br />ID: {station.id}
+                <br />Name: {station.name}
+              </div>
+            </Popup>
+          </CircleMarker>
         ))}
       </MapContainer>
     </div>

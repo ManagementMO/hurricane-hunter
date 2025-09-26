@@ -397,6 +397,133 @@ async def health():
     return {"status": "healthy", "service": "Hurricane Hunter API"}
 
 
+# Cache for traditional weather stations data
+traditional_stations_cache = {
+    "data": None,
+    "timestamp": None
+}
+
+TRADITIONAL_STATIONS_CACHE_EXPIRY = 24 * 60  # 24 hours in minutes
+
+
+@app.get("/api/traditional-stations")
+async def get_traditional_stations():
+    """
+    Get traditional weather station locations from NOAA/NWS API.
+    Implements aggressive 24-hour caching for performance.
+    """
+    try:
+        current_time = datetime.now(timezone.utc)
+
+        # Check if we have cached data that's still valid
+        if (traditional_stations_cache["data"] is not None and
+            traditional_stations_cache["timestamp"] is not None):
+
+            time_diff = (current_time - traditional_stations_cache["timestamp"]).total_seconds() / 60
+            if time_diff < TRADITIONAL_STATIONS_CACHE_EXPIRY:
+                logger.info("Serving cached traditional stations data")
+                return traditional_stations_cache["data"]
+
+        logger.info("Fetching fresh traditional stations data from NOAA API")
+
+        # Fetch data from NOAA/NWS API with rate limiting and error handling
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
+            stations_data = []
+            # Use limit parameter to get more stations per request and reduce API calls
+            url = "https://api.weather.gov/stations?limit=500"
+            page_count = 0
+            max_pages = 5  # Limit to 5 pages for faster testing (~2500 stations)
+
+            # Handle pagination with rate limiting
+            while url and page_count < max_pages:
+                try:
+                    # Add delay between requests to respect rate limits
+                    if page_count > 0:
+                        await asyncio.sleep(1)  # 1 second delay between requests
+
+                    logger.info(f"Fetching stations page {page_count + 1}: {url}")
+
+                    async with session.get(url, headers={'User-Agent': 'Hurricane Hunter Dashboard'}) as response:
+                        if response.status == 429:  # Rate limited
+                            logger.warning("Rate limited, waiting 5 seconds...")
+                            await asyncio.sleep(5)
+                            continue
+
+                        if response.status != 200:
+                            logger.error(f"NOAA API error: {response.status}")
+                            if page_count == 0:  # Only raise error if first request fails
+                                raise HTTPException(status_code=502, detail="Failed to fetch station data")
+                            else:
+                                break  # Stop pagination but return what we have
+
+                        data = await response.json()
+
+                        # Process stations from this page
+                        if "features" in data:
+                            for station in data["features"]:
+                                if (station.get("geometry") and
+                                    station["geometry"].get("coordinates") and
+                                    station.get("properties")):
+
+                                    props = station["properties"]
+                                    coords = station["geometry"]["coordinates"]
+
+                                    # Only include stations with valid coordinates
+                                    if len(coords) >= 2 and coords[0] is not None and coords[1] is not None:
+                                        stations_data.append({
+                                            "type": "Feature",
+                                            "geometry": {
+                                                "type": "Point",
+                                                "coordinates": coords
+                                            },
+                                            "properties": {
+                                                "id": props.get("stationIdentifier", "Unknown"),
+                                                "name": props.get("name", "Unknown Station"),
+                                                "type": "traditional_station"
+                                            }
+                                        })
+
+                        # Check for next page
+                        url = None
+                        if "pagination" in data and "next" in data["pagination"]:
+                            url = data["pagination"]["next"]
+
+                        page_count += 1
+                        logger.info(f"Processed page {page_count}, total stations: {len(stations_data)}")
+
+                except asyncio.TimeoutError:
+                    logger.error(f"Timeout on page {page_count + 1}")
+                    break
+                except Exception as e:
+                    logger.error(f"Error fetching page {page_count + 1}: {e}")
+                    if page_count == 0:
+                        raise
+                    break
+
+        # Create GeoJSON FeatureCollection
+        geojson_data = {
+            "type": "FeatureCollection",
+            "features": stations_data
+        }
+
+        # Cache the processed data
+        traditional_stations_cache["data"] = geojson_data
+        traditional_stations_cache["timestamp"] = current_time
+
+        logger.info(f"Processed {len(stations_data)} traditional weather stations")
+        return geojson_data
+
+    except Exception as e:
+        logger.error(f"Error in get_traditional_stations: {e}")
+
+        # If we have cached data, serve it even if expired
+        if traditional_stations_cache["data"] is not None:
+            logger.info("Serving expired cached data due to error")
+            return traditional_stations_cache["data"]
+
+        raise HTTPException(status_code=500, detail="Failed to fetch traditional station data")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
